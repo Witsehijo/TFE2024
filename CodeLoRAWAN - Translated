@@ -1,0 +1,86 @@
+#include <HardwareSerial.h>
+ 
+HardwareSerial SerialLoRa(1);
+bool joined = false;
+ 
+ 
+void setup() {
+  Serial.begin(115200);  // Debug on the serial monitor
+  Serial1.begin(115200, SERIAL_8N1, 37, 38);
+  pinMode(36, OUTPUT);
+  digitalWrite(36, HIGH);
+ 
+  Serial.println("LoRa module (RAK3172) configuration via AT commands");
+ 
+  // Send AT commands and check responses
+  sendATCommand("AT");
+  sendATCommand("AT+DEVEUI=AC1F09FFFE11C8B9");
+  sendATCommand("AT+APPEUI=334455BD44BBB333"); 
+  sendATCommand("AT+APPKEY=81F2A0BFC0B95A3249D3AC9694E843CF"); 
+ 
+  // Configure the region (e.g., EU868 for Europe)
+  sendATCommand("AT+NWM=1"); // Ensure the module is in LoRaWAN mode
+  sendATCommand("AT+DR=0"); // Set the region to EU868 (verify '0' matches your region in the documentation)
+ 
+  delay(1000); // Short pause to allow the module to process the commands
+ 
+  sendATCommand("AT+JOIN");
+  Serial.println("JOIN command sent");
+}
+ 
+void loop() {
+  // Read and print all responses from the RAK3172 module
+  reponse();
+ 
+  // Send data every 10 seconds if the join succeeded
+  static unsigned long lastSendTime = 0;
+  if (joined && millis() - lastSendTime > 10000) {
+    lastSendTime = millis();
+    sendStringData("My name is Witse"); // Sending a string
+   
+  }
+  delay(200);
+}
+ 
+void sendATCommand(const char* command) {
+  Serial1.println(command);
+  Serial.print("Sending AT command: ");
+  Serial.println(command);
+  delay(2000); // Delay to allow the module to process the command
+  reponse();
+}
+ 
+void reponse() {
+  while (Serial1.available()) {
+    String line = Serial1.readStringUntil('\n');
+    Serial.print("LoRa module response: ");
+    Serial.println(line);
+    if (line.indexOf("+EVT:JOINED") != -1) {
+      Serial.println("Device successfully joined the network!");
+      joined = true;
+    } else if (line.indexOf("+EVT:JOIN_FAILED") != -1) {
+      Serial.println("Join failed!");
+      joined = false;
+    }
+    line = "";
+  }
+}
+ 
+void sendLoRaData(const char* hexData) {
+  String cmd = "AT+SEND=1:"; // Port 1
+  cmd += String(hexData);
+  sendATCommand(cmd.c_str());
+  Serial.print("Sending data: ");
+  Serial.println(hexData);
+}
+ 
+void sendStringData(const char* str) {
+  String hexString = "";
+  while (*str) {
+    char hex[3];
+    sprintf(hex, "%02X", *str++);
+    hexString += hex;
+  }
+  sendLoRaData(hexString.c_str());
+}
+ 
